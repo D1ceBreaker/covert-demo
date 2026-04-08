@@ -8,8 +8,8 @@ import socket
 import time
 
 from constants import (
-    DEFAULT_TARGET_HOST,
-    DEFAULT_PORT,
+    DEFAULT_BIND_HOST,
+    DEFAULT_P1_PORT,
     PACKET_SIZE,
     BASE_INTERVAL_MIN,
     BASE_INTERVAL_MAX,
@@ -40,7 +40,7 @@ def parse_arguments():
         required=False,
         dest='host',
         type=str,
-        default=DEFAULT_TARGET_HOST
+        default=DEFAULT_BIND_HOST
     )
     parser.add_argument(
         '--port',
@@ -48,7 +48,7 @@ def parse_arguments():
         required=False,
         dest='port',
         type=int,
-        default=DEFAULT_PORT
+        default=DEFAULT_P1_PORT
     )
     parser.add_argument(
         '--seed',
