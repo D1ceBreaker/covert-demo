@@ -31,3 +31,30 @@ SOCKET_TIMEOUT_SECONDS = 20.0
 RECV_BUFFER_SIZE = 65535
 
 TEXT_PREVIEW_BYTES = 64
+
+# -------------------------------------------------
+# Параметры защиты на устройстве защиты
+# -------------------------------------------------
+
+# Режимы:
+# none       - защита отключена
+# limit      - ограничение пропускной способности скрытого канала
+# normalize  - полное устранение скрытого канала
+DEFENSE_NONE = "none"
+DEFENSE_LIMIT = "limit"
+DEFENSE_NORMALIZE = "normalize"
+
+# Для режима limit:
+# вероятность вставки фиктивного пакета после каждого реального
+LIMIT_DUMMY_PROBABILITY = 0.5
+
+# задержка фиктивного пакета после реального
+LIMIT_DUMMY_DELAY_MIN = 0.05
+LIMIT_DUMMY_DELAY_MAX = 0.15
+
+# Для режима normalize:
+# фиксированный интервал выдачи пакетов на выходе УЗ
+NORMALIZE_INTERVAL = 0.18
+
+# Размер фиктивного пакета
+DUMMY_PACKET_SIZE = PACKET_SIZE
