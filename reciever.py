@@ -91,7 +91,7 @@ def decode_n_bits(sock: socket.socket, prev_timestamp: float, prev_level: int, c
 def main():
     args = parse_arguments()
 
-    print(f"[INFO] receiver listening on {args.bind_host}:{args.port}")
+    print(f"[INFO] PC2 listening on {args.bind_host}:{args.port}")
     print(f"[INFO] threshold: {LEVEL_THRESHOLD:.6f}s")
     print(f"[INFO] initial level: {INITIAL_LEVEL}")
 

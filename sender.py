@@ -119,11 +119,11 @@ def main():
     packet_queue: queue.Queue[bytes] = queue.Queue()
     stop_event = threading.Event()
 
-    print(f"[INFO] ПК1: в буфер пакеты — случайно каждые "
-          f"[{PC1_INTERVAL_MIN:.3f}, {PC1_INTERVAL_MAX:.3f}] с (быстрее выдачи t и t+Δ)")
-    print(f"[INFO] закладка: паузы только t={IMPLANT_INTERVAL_T:.3f} с или t+Δ={IMPLANT_INTERVAL_T + DELTA:.3f} с (без разброса)")
-    print(f"[INFO] файл: {args.filename}, байт: {len(secret_data)}")
-    print(f"[INFO] преамбула: {len(PREAMBLE_BITS)} бит, поле длины: {LENGTH_FIELD_BITS}, бит к передаче: {len(bitstream)}")
+    print(f"[INFO] PC1 sends set length packages within"
+          f"[{PC1_INTERVAL_MIN:.3f}, {PC1_INTERVAL_MAX:.3f}]")
+    print(f"[INFO] PLANT t={IMPLANT_INTERVAL_T:.3f} or t+Δ={IMPLANT_INTERVAL_T + DELTA:.3f}")
+    print(f"[INFO] SECRET MESSAGE: {args.filename}, {len(secret_data)} bytes")
+    print(f"[INFO] PREAMBLE: {len(PREAMBLE_BITS)} bits")
 
     addr = (args.host, args.port)
 
@@ -141,11 +141,9 @@ def main():
         if packet_queue.qsize() < 1:
             stop_event.set()
             producer.join(timeout=1.0)
-            raise RuntimeError("ПК1 не успел положить первый пакет (seq=1) в очередь")
+            raise RuntimeError("PC1 couldn't send first package")
 
-        # Якорь: первый пакет без паузы закладки; первый бит потока — интервал до следующего пакета
         implant.wait_and_send_from_queue(sock, addr, packet_queue, 0.0)
-        print("[START] якорь: первый пакет (seq=1) из очереди, без паузы закладки")
 
         for idx, bit in enumerate(bitstream, start=1):
             base_interval, actual_interval = implant.intervals_for_bit(bit)
@@ -153,7 +151,6 @@ def main():
 
             print(
                 f"[SEND] bit#{idx:05d}={bit} "
-                f"base={base_interval:.6f}s "
                 f"level={implant.current_level} "
                 f"actual={actual_interval:.6f}s "
                 f"queue≈{packet_queue.qsize()}"
@@ -162,7 +159,7 @@ def main():
         stop_event.set()
         producer.join(timeout=2.0)
 
-    print("[INFO] передача завершена")
+    print("[INFO] transmission over")
 
 
 if __name__ == "__main__":
