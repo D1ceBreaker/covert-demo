@@ -24,7 +24,6 @@ LEVEL_THRESHOLD = (
 
 # Служебные параметры
 
-PREAMBLE_BITS = "1010110011100101"
 LENGTH_FIELD_BITS = 32
 
 SOCKET_TIMEOUT_SECONDS = 20.0
@@ -45,8 +44,8 @@ DEFENSE_LIMIT = "limit"
 DEFENSE_NORMALIZE = "normalize"
 
 # Для режима limit:
-# вероятность вставки фиктивного пакета после каждого реального
-LIMIT_DUMMY_PROBABILITY = 0.5
+# вероятность вставки фиктивного пакета после каждого реального (после стартового SYNC)
+LIMIT_DUMMY_PROBABILITY = 0.15
 
 # задержка фиктивного пакета после реального
 LIMIT_DUMMY_DELAY_MIN = 0.05

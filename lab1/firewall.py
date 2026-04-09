@@ -25,6 +25,9 @@ from constants import (
     NORMALIZE_INTERVAL,
 )
 
+# Сколько первых реальных пересылок подряд без dummy (только SYNC; преамбулы нет)
+PROTECTED_PREFIX_REAL_FORWARDS = 1
+
 
 class Stats:
     def __init__(self):
@@ -178,7 +181,8 @@ def run_no_defense(recv_sock, send_sock, send_lock, dest_addr, stats: Stats):
 
 def run_limit_defense(recv_sock, send_sock, send_lock, dest_addr, stats: Stats):
     print("[INFO] defense mode: limit")
-    print(f"[INFO] dummy probability: {LIMIT_DUMMY_PROBABILITY}")
+    print(f"[INFO] dummy probability (after SYNC): {LIMIT_DUMMY_PROBABILITY}")
+    print(f"[INFO] no dummy after forwarding first {PROTECTED_PREFIX_REAL_FORWARDS} real packet(s) (SYNC)")
     print(f"[INFO] dummy delay range: [{LIMIT_DUMMY_DELAY_MIN}, {LIMIT_DUMMY_DELAY_MAX}] s")
     print(f"[INFO] dummy size: {DUMMY_PACKET_SIZE}")
 
@@ -206,6 +210,10 @@ def run_limit_defense(recv_sock, send_sock, send_lock, dest_addr, stats: Stats):
                 f"to={dest_addr} "
                 f"size={len(data)}"
             )
+
+            # Не вставляем dummy сразу после SYNC (преамбулы нет)
+            if stats.forwarded_real_packets <= PROTECTED_PREFIX_REAL_FORWARDS:
+                continue
 
             # С вероятностью p вставляем один фиктивный пакет
             if rng.random() < LIMIT_DUMMY_PROBABILITY:
@@ -255,6 +263,16 @@ def sleep_until(target_time: float, stop_event: threading.Event):
         stop_event.wait(min(remaining, 0.05))
 
 
+def dequeue_real_blocking(packet_queue: queue.Queue, stop_event: threading.Event):
+    """Блокируется до появления пакета или остановки."""
+    while not stop_event.is_set():
+        try:
+            return packet_queue.get(timeout=0.1)
+        except queue.Empty:
+            pass
+    return None
+
+
 def normalize_output_worker(send_sock, send_lock, dest_addr, packet_queue: queue.Queue, stop_event: threading.Event,
                             first_packet_event: threading.Event, stats: Stats, normalize_interval: float, dummy_size: int):
     print("[NORMALIZE][OUT] waiting for first packet")
@@ -298,14 +316,27 @@ def normalize_output_worker(send_sock, send_lock, dest_addr, packet_queue: queue
                 f"queue_size={packet_queue.qsize()}"
             )
         except queue.Empty:
-            dummy_packet = build_dummy_packet(dummy_size)
-            send_packet(send_sock, send_lock, dummy_packet, dest_addr)
-            stats.add_dummy_forwarded(len(dummy_packet))
+            # После SYNC до первого бита длины не вставляем dummy — ждём реальный пакет
+            if stats.forwarded_real_packets < PROTECTED_PREFIX_REAL_FORWARDS + 1:
+                packet = dequeue_real_blocking(packet_queue, stop_event)
+                if packet is None:
+                    return
+                send_packet(send_sock, send_lock, packet, dest_addr)
+                stats.add_real_forwarded(len(packet))
+                print(
+                    f"[NORMALIZE][OUT][REAL] to={dest_addr} "
+                    f"size={len(packet)} "
+                    f"queue_size={packet_queue.qsize()} (after SYNC, no dummy)"
+                )
+            else:
+                dummy_packet = build_dummy_packet(dummy_size)
+                send_packet(send_sock, send_lock, dummy_packet, dest_addr)
+                stats.add_dummy_forwarded(len(dummy_packet))
 
-            print(
-                f"[NORMALIZE][OUT][DUMMY] to={dest_addr} "
-                f"size={len(dummy_packet)}"
-            )
+                print(
+                    f"[NORMALIZE][OUT][DUMMY] to={dest_addr} "
+                    f"size={len(dummy_packet)}"
+                )
 
         next_send_time += normalize_interval
 
@@ -313,6 +344,7 @@ def normalize_output_worker(send_sock, send_lock, dest_addr, packet_queue: queue
 def run_normalize_defense(recv_sock, send_sock, send_lock, dest_addr, stats: Stats):
     print("[INFO] defense mode: normalize")
     print(f"[INFO] normalize interval: {NORMALIZE_INTERVAL}")
+    print(f"[INFO] no dummies on empty queue until {PROTECTED_PREFIX_REAL_FORWARDS + 1} real packets (SYNC + first data)")
     print(f"[INFO] dummy size: {DUMMY_PACKET_SIZE}")
 
     stop_event = threading.Event()

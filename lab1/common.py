@@ -33,10 +33,10 @@ def bits_to_int(bits: str) -> int:
     return int(bits, 2)
 
 
-def build_secret_bitstream(data: bytes, preamble_bits: str, length_field_bits: int) -> str:
+def build_secret_bitstream(data: bytes, length_field_bits: int) -> str:
     payload_bits = bytes_to_bits(data)
     length_bits = int_to_bits(len(data), length_field_bits)
-    return preamble_bits + length_bits + payload_bits
+    return length_bits + payload_bits
 
 
 def utf8_preview(data: bytes, max_bytes: int = 64) -> str:

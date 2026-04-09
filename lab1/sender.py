@@ -15,7 +15,6 @@ from constants import (
     BASE_INTERVAL_MAX,
     DELTA,
     INITIAL_LEVEL,
-    PREAMBLE_BITS,
     LENGTH_FIELD_BITS,
 )
 from common import read_file_bytes, build_secret_bitstream
@@ -101,7 +100,6 @@ def main():
     secret_data = read_file_bytes(args.filename)
     bitstream = build_secret_bitstream(
         data=secret_data,
-        preamble_bits=PREAMBLE_BITS,
         length_field_bits=LENGTH_FIELD_BITS
     )
 
@@ -110,7 +108,6 @@ def main():
     print(f"[INFO] secret file: {args.filename}")
     print(f"[INFO] secret bytes: {len(secret_data)}")
     print(f"[INFO] total bits to send: {len(bitstream)}")
-    print(f"[INFO] preamble bits: {len(PREAMBLE_BITS)}")
     print(f"[INFO] length field bits: {LENGTH_FIELD_BITS}")
     print(f"[INFO] payload bits: {len(secret_data) * 8}")
     print(f"[INFO] base interval range: [{BASE_INTERVAL_MIN:.3f}, {BASE_INTERVAL_MAX:.3f}] s")
