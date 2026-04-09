@@ -15,6 +15,7 @@ from constants import (
     RECV_BUFFER_SIZE,
     DUMMY_PACKET_SIZE,
     PREAMBLE_BITS,
+    LENGTH_FIELD_BITS,
     DEFENSE_NONE,
     DEFENSE_LIMIT,
     DEFENSE_NORMALIZE,
@@ -24,8 +25,8 @@ from constants import (
     NORMALIZE_INTERVAL,
 )
 
-# SYNC (1) + биты преамбулы — без dummy в limit / ожидание в normalize
-PROTECTED_PREFIX_REAL_FORWARDS = 1 + len(PREAMBLE_BITS)
+# SYNC + преамбула + поле длины — без dummy (limit) / ожидание реала (normalize)
+PROTECTED_PREFIX_REAL_FORWARDS = 1 + len(PREAMBLE_BITS) + LENGTH_FIELD_BITS
 
 
 class Stats:
@@ -179,8 +180,11 @@ def run_no_defense(recv_sock, send_sock, send_lock, dest_addr, stats: Stats):
 
 def run_limit_defense(recv_sock, send_sock, send_lock, dest_addr, stats: Stats):
     print("[INFO] defense mode: limit")
-    print(f"[INFO] dummy probability (after SYNC): {LIMIT_DUMMY_PROBABILITY}")
-    print(f"[INFO] no dummy after forwarding first {PROTECTED_PREFIX_REAL_FORWARDS} real packet(s) (SYNC + preamble)")
+    print(f"[INFO] dummy probability (after header phase): {LIMIT_DUMMY_PROBABILITY}")
+    print(
+        f"[INFO] no dummy after forwarding first {PROTECTED_PREFIX_REAL_FORWARDS} real packet(s) "
+        f"(SYNC + preamble + length field, {LENGTH_FIELD_BITS} bits)"
+    )
     print(f"[INFO] dummy delay range: [{LIMIT_DUMMY_DELAY_MIN}, {LIMIT_DUMMY_DELAY_MAX}] s")
     print(f"[INFO] dummy size: {DUMMY_PACKET_SIZE}")
 
@@ -318,7 +322,7 @@ def normalize_output_worker(send_sock, send_lock, dest_addr, packet_queue: queue
                 print(
                     f"[NORMALIZE][OUT][REAL] to={dest_addr} "
                     f"size={len(packet)} "
-                    f"queue_size={packet_queue.qsize()} (SYNC/preamble phase, no dummy)"
+                    f"queue_size={packet_queue.qsize()} (header phase, no dummy)"
                 )
             else:
                 dummy_packet = build_dummy_packet(dummy_size)
@@ -336,7 +340,10 @@ def normalize_output_worker(send_sock, send_lock, dest_addr, packet_queue: queue
 def run_normalize_defense(recv_sock, send_sock, send_lock, dest_addr, stats: Stats):
     print("[INFO] defense mode: normalize")
     print(f"[INFO] normalize interval: {NORMALIZE_INTERVAL}")
-    print(f"[INFO] no dummies on empty queue until {PROTECTED_PREFIX_REAL_FORWARDS + 1} real packets (SYNC + preamble + first length bit)")
+    print(
+        f"[INFO] no dummies on empty queue until {PROTECTED_PREFIX_REAL_FORWARDS + 1} real packets "
+        f"(after SYNC + preamble + {LENGTH_FIELD_BITS} length bits, then payload)"
+    )
     print(f"[INFO] dummy size: {DUMMY_PACKET_SIZE}")
 
     stop_event = threading.Event()
