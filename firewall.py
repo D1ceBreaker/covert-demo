@@ -1,5 +1,3 @@
-# protection_device.py
-
 import argparse
 import os
 import queue
@@ -25,7 +23,6 @@ from constants import (
     NORMALIZE_INTERVAL,
 )
 
-# Сколько первых реальных пересылок подряд без dummy (только SYNC; преамбулы нет)
 PROTECTED_PREFIX_REAL_FORWARDS = 1
 
 
@@ -105,7 +102,6 @@ def parse_arguments():
         default=DEFAULT_P2_LISTEN_PORT
     )
 
-    # Если аргумент не передан -> защиты нет
     parser.add_argument(
         '--defense',
         help='defense mode',
@@ -200,7 +196,6 @@ def run_limit_defense(recv_sock, send_sock, send_lock, dest_addr, stats: Stats):
             timestamp = time.monotonic()
             stats.add_received(len(data))
 
-            # Реальный пакет пересылается сразу
             send_packet(send_sock, send_lock, data, dest_addr)
             stats.add_real_forwarded(len(data))
 
@@ -211,11 +206,9 @@ def run_limit_defense(recv_sock, send_sock, send_lock, dest_addr, stats: Stats):
                 f"size={len(data)}"
             )
 
-            # Не вставляем dummy сразу после SYNC (преамбулы нет)
             if stats.forwarded_real_packets <= PROTECTED_PREFIX_REAL_FORWARDS:
                 continue
 
-            # С вероятностью p вставляем один фиктивный пакет
             if rng.random() < LIMIT_DUMMY_PROBABILITY:
                 delay = rng.uniform(LIMIT_DUMMY_DELAY_MIN, LIMIT_DUMMY_DELAY_MAX)
 
@@ -264,7 +257,6 @@ def sleep_until(target_time: float, stop_event: threading.Event):
 
 
 def dequeue_real_blocking(packet_queue: queue.Queue, stop_event: threading.Event):
-    """Блокируется до появления пакета или остановки."""
     while not stop_event.is_set():
         try:
             return packet_queue.get(timeout=0.1)
@@ -285,7 +277,6 @@ def normalize_output_worker(send_sock, send_lock, dest_addr, packet_queue: queue
     if stop_event.is_set():
         return
 
-    # Первый пакет отправляем сразу как стартовый
     try:
         first_packet = packet_queue.get(timeout=1.0)
     except queue.Empty:
@@ -316,7 +307,6 @@ def normalize_output_worker(send_sock, send_lock, dest_addr, packet_queue: queue
                 f"queue_size={packet_queue.qsize()}"
             )
         except queue.Empty:
-            # После SYNC до первого бита длины не вставляем dummy — ждём реальный пакет
             if stats.forwarded_real_packets < PROTECTED_PREFIX_REAL_FORWARDS + 1:
                 packet = dequeue_real_blocking(packet_queue, stop_event)
                 if packet is None:

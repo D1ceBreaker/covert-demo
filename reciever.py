@@ -1,5 +1,3 @@
-# receiver.py
-
 import argparse
 import socket
 import time

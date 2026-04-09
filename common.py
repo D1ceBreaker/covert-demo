@@ -1,5 +1,3 @@
-# common.py
-
 from pathlib import Path
 
 

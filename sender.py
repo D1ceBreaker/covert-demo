@@ -1,5 +1,3 @@
-# sender.py
-
 import argparse
 import os
 import queue
@@ -129,9 +127,6 @@ def main():
         for idx, bit in enumerate(bitstream, start=1):
             base_interval = rng.uniform(BASE_INTERVAL_MIN, BASE_INTERVAL_MAX)
 
-            # Пример 10:
-            # 0 -> уровень не меняется
-            # 1 -> уровень переключается
             if bit == "1":
                 current_level = 1 - current_level
 
