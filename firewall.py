@@ -25,7 +25,7 @@ from constants import (
     NORMALIZE_INTERVAL,
 )
 
-# SYNC + преамбула + поле длины — без dummy (limit) / ожидание реала (normalize)
+# Якорь (1) + преамбула + поле длины — без dummy (limit) / ожидание реала (normalize)
 PROTECTED_PREFIX_REAL_FORWARDS = 1 + len(PREAMBLE_BITS) + LENGTH_FIELD_BITS
 
 
@@ -183,7 +183,7 @@ def run_limit_defense(recv_sock, send_sock, send_lock, dest_addr, stats: Stats):
     print(f"[INFO] dummy probability (after header phase): {LIMIT_DUMMY_PROBABILITY}")
     print(
         f"[INFO] no dummy after forwarding first {PROTECTED_PREFIX_REAL_FORWARDS} real packet(s) "
-        f"(SYNC + preamble + length field, {LENGTH_FIELD_BITS} bits)"
+        f"(anchor + preamble + length field, {LENGTH_FIELD_BITS} bits)"
     )
     print(f"[INFO] dummy delay range: [{LIMIT_DUMMY_DELAY_MIN}, {LIMIT_DUMMY_DELAY_MAX}] s")
     print(f"[INFO] dummy size: {DUMMY_PACKET_SIZE}")
@@ -342,7 +342,7 @@ def run_normalize_defense(recv_sock, send_sock, send_lock, dest_addr, stats: Sta
     print(f"[INFO] normalize interval: {NORMALIZE_INTERVAL}")
     print(
         f"[INFO] no dummies on empty queue until {PROTECTED_PREFIX_REAL_FORWARDS + 1} real packets "
-        f"(after SYNC + preamble + {LENGTH_FIELD_BITS} length bits, then payload)"
+        f"(after anchor + preamble + {LENGTH_FIELD_BITS} length bits, then payload)"
     )
     print(f"[INFO] dummy size: {DUMMY_PACKET_SIZE}")
 

@@ -102,7 +102,7 @@ def main():
         data, addr, prev_timestamp = recv_packet(sock)
         prev_level = INITIAL_LEVEL
 
-        print(f"[SYNC] initial packet received from {addr}, size={len(data)}")
+        print(f"[START] первый пакет (якорь) от {addr}, size={len(data)}")
 
         preamble_bits, prev_timestamp, prev_level = decode_n_bits(
             sock=sock,
