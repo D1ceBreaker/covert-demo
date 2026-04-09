@@ -1,3 +1,5 @@
+# protection_device.py
+
 import argparse
 import os
 import queue
@@ -13,9 +15,14 @@ from constants import (
     DEFAULT_P2_LISTEN_PORT,
     SOCKET_TIMEOUT_SECONDS,
     RECV_BUFFER_SIZE,
+    DUMMY_PACKET_SIZE,
     DEFENSE_NONE,
     DEFENSE_LIMIT,
     DEFENSE_NORMALIZE,
+    LIMIT_DUMMY_PROBABILITY,
+    LIMIT_DUMMY_DELAY_MIN,
+    LIMIT_DUMMY_DELAY_MAX,
+    NORMALIZE_INTERVAL,
 )
 
 
@@ -106,15 +113,6 @@ def parse_arguments():
         default=DEFENSE_NONE
     )
 
-    parser.add_argument(
-        '--seed',
-        help='random seed',
-        required=False,
-        dest='seed',
-        type=int,
-        default=None
-    )
-
     return parser.parse_args()
 
 
@@ -178,13 +176,13 @@ def run_no_defense(recv_sock, send_sock, send_lock, dest_addr, stats: Stats):
         )
 
 
-def run_limit_defense(recv_sock, send_sock, send_lock, dest_addr, stats: Stats, args):
+def run_limit_defense(recv_sock, send_sock, send_lock, dest_addr, stats: Stats):
     print("[INFO] defense mode: limit")
-    print(f"[INFO] dummy probability: {args.dummy_probability}")
-    print(f"[INFO] dummy delay range: [{args.dummy_delay_min}, {args.dummy_delay_max}] s")
-    print(f"[INFO] dummy size: {args.dummy_size}")
+    print(f"[INFO] dummy probability: {LIMIT_DUMMY_PROBABILITY}")
+    print(f"[INFO] dummy delay range: [{LIMIT_DUMMY_DELAY_MIN}, {LIMIT_DUMMY_DELAY_MAX}] s")
+    print(f"[INFO] dummy size: {DUMMY_PACKET_SIZE}")
 
-    rng = random.Random(args.seed)
+    rng = random.Random(None)
     stop_event = threading.Event()
     dummy_threads = []
 
@@ -210,12 +208,12 @@ def run_limit_defense(recv_sock, send_sock, send_lock, dest_addr, stats: Stats, 
             )
 
             # С вероятностью p вставляем один фиктивный пакет
-            if rng.random() < args.dummy_probability:
-                delay = rng.uniform(args.dummy_delay_min, args.dummy_delay_max)
+            if rng.random() < LIMIT_DUMMY_PROBABILITY:
+                delay = rng.uniform(LIMIT_DUMMY_DELAY_MIN, LIMIT_DUMMY_DELAY_MAX)
 
                 th = threading.Thread(
                     target=delayed_dummy_sender,
-                    args=(send_sock, send_lock, dest_addr, delay, args.dummy_size, stats, stop_event),
+                    args=(send_sock, send_lock, dest_addr, delay, DUMMY_PACKET_SIZE, stats, stop_event),
                     daemon=True
                 )
                 th.start()
@@ -312,10 +310,10 @@ def normalize_output_worker(send_sock, send_lock, dest_addr, packet_queue: queue
         next_send_time += normalize_interval
 
 
-def run_normalize_defense(recv_sock, send_sock, send_lock, dest_addr, stats: Stats, args):
+def run_normalize_defense(recv_sock, send_sock, send_lock, dest_addr, stats: Stats):
     print("[INFO] defense mode: normalize")
-    print(f"[INFO] normalize interval: {args.normalize_interval}")
-    print(f"[INFO] dummy size: {args.dummy_size}")
+    print(f"[INFO] normalize interval: {NORMALIZE_INTERVAL}")
+    print(f"[INFO] dummy size: {DUMMY_PACKET_SIZE}")
 
     stop_event = threading.Event()
     first_packet_event = threading.Event()
@@ -330,7 +328,7 @@ def run_normalize_defense(recv_sock, send_sock, send_lock, dest_addr, stats: Sta
     output_thread = threading.Thread(
         target=normalize_output_worker,
         args=(send_sock, send_lock, dest_addr, packet_queue, stop_event, first_packet_event, stats,
-              args.normalize_interval, args.dummy_size),
+              NORMALIZE_INTERVAL, DUMMY_PACKET_SIZE),
         daemon=True
     )
 
@@ -371,9 +369,9 @@ def main():
             if args.defense == DEFENSE_NONE:
                 run_no_defense(recv_sock, send_sock, send_lock, dest_addr, stats)
             elif args.defense == DEFENSE_LIMIT:
-                run_limit_defense(recv_sock, send_sock, send_lock, dest_addr, stats, args)
+                run_limit_defense(recv_sock, send_sock, send_lock, dest_addr, stats)
             elif args.defense == DEFENSE_NORMALIZE:
-                run_normalize_defense(recv_sock, send_sock, send_lock, dest_addr, stats, args)
+                run_normalize_defense(recv_sock, send_sock, send_lock, dest_addr, stats)
             else:
                 raise ValueError(f"Unknown defense mode: {args.defense}")
         except KeyboardInterrupt:
