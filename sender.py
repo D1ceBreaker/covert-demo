@@ -1,95 +1,107 @@
+"""
+ПК1: модель 2 — в фоне генерирует пакеты фиксированного размера в случайные
+моменты (быстрее, чем интервалы выдачи закладкой) и кладёт их в общую очередь.
+
+Закладка (implant): без случайности задаёт интервалы по примеру 10 и в нужные
+моменты забирает пакеты из очереди и отправляет в сеть.
+
+Служебный SYNC (seq=0) не обходит очередь: сначала попадает в буфер ПК1,
+затем закладка отправляет его тем же путём, что и пакеты битов (первый раз
+без задержки). Далее — преамбула, поле длины, полезная нагрузка.
+"""
+
 import argparse
 import os
 import queue
 import random
 import socket
+import threading
 import time
 
 from constants import (
     DEFAULT_BIND_HOST,
     DEFAULT_P1_PORT,
     PACKET_SIZE,
-    BASE_INTERVAL_MIN,
-    BASE_INTERVAL_MAX,
+    PC1_INTERVAL_MIN,
+    PC1_INTERVAL_MAX,
+    IMPLANT_INTERVAL_T,
     DELTA,
-    INITIAL_LEVEL,
+    PREAMBLE_BITS,
     LENGTH_FIELD_BITS,
 )
 from common import read_file_bytes, build_secret_bitstream
+from implant import CovertImplant
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description='Covert channel emulation: variant 2 (Model 2 + Example 10)',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        description="ПК1 (модель 2) + закладка (пример 10), очередь между ними",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
     parser.add_argument(
-        '-f', '--filename',
-        help='data to transfer via covert channel',
+        "-f",
+        "--filename",
+        help="файл для передачи по скрытому каналу",
         required=True,
-        dest='filename',
-        type=str
-    )
-    parser.add_argument(
-        '--host',
-        help='receiver host/IP',
-        required=False,
-        dest='host',
+        dest="filename",
         type=str,
-        default=DEFAULT_BIND_HOST
     )
     parser.add_argument(
-        '--port',
-        help='receiver UDP port',
+        "--host",
+        help="хост/адрес приёмника или УЗ",
         required=False,
-        dest='port',
-        type=int,
-        default=DEFAULT_P1_PORT
+        dest="host",
+        type=str,
+        default=DEFAULT_BIND_HOST,
     )
     parser.add_argument(
-        '--seed',
-        help='random seed for reproducible experiments',
+        "--port",
+        help="UDP-порт",
         required=False,
-        dest='seed',
+        dest="port",
         type=int,
-        default=None
+        default=DEFAULT_P1_PORT,
+    )
+    parser.add_argument(
+        "--seed",
+        help="seed ГПСЧ для ПК1 (случайные интервалы генерации в буфер)",
+        required=False,
+        dest="seed",
+        type=int,
+        default=None,
     )
 
     return parser.parse_args()
 
 
-def build_legitimate_packet(seq: int) -> bytes:
-    """
-    Формирует пакет фиксированной длины.
-    Содержимое - легитимные данные, скрытая информация в payload не кладется.
-    """
-    header = f"LEGIT:{seq:08d}|".encode("ascii")
-    if len(header) > PACKET_SIZE:
-        raise ValueError("PACKET_SIZE слишком мал для заголовка")
-    padding = os.urandom(PACKET_SIZE - len(header))
-    return header + padding
+class LegitimatePacketSource:
+    """Пакеты фиксированного размера; скрытый груз только в очереди на отправку закладкой."""
+
+    def build_packet(self, seq: int) -> bytes:
+        header = f"LEGIT:{seq:08d}|".encode("ascii")
+        if len(header) > PACKET_SIZE:
+            raise ValueError("PACKET_SIZE слишком мал для заголовка")
+        padding = os.urandom(PACKET_SIZE - len(header))
+        return header + padding
 
 
-def sleep_precisely(seconds: float):
-    if seconds > 0:
-        time.sleep(seconds)
-
-
-def send_with_buffering(sock: socket.socket, addr: tuple[str, int], packet: bytes, interval: float):
-    """
-    Эмуляция буферизации:
-    1. Пакет кладется в буфер.
-    2. Ждет нужное время.
-    3. Уходит в сеть без изменения содержимого.
-    """
-    buf = queue.Queue()
-    buf.put(packet)
-
-    sleep_precisely(interval)
-
-    data = buf.get()
-    sock.sendto(data, addr)
+def pc1_producer_loop(
+    pc1: LegitimatePacketSource,
+    packet_queue: queue.Queue[bytes],
+    rng: random.Random,
+    stop_event: threading.Event,
+    first_seq: int,
+) -> None:
+    """ПК1: кладёт пакеты в очередь с случайными короткими интервалами."""
+    seq = first_seq
+    while not stop_event.is_set():
+        pkt = pc1.build_packet(seq)
+        seq += 1
+        packet_queue.put(pkt)
+        delay = rng.uniform(PC1_INTERVAL_MIN, PC1_INTERVAL_MAX)
+        if stop_event.wait(delay):
+            break
 
 
 def main():
@@ -98,54 +110,61 @@ def main():
     secret_data = read_file_bytes(args.filename)
     bitstream = build_secret_bitstream(
         data=secret_data,
-        length_field_bits=LENGTH_FIELD_BITS
+        preamble_bits=PREAMBLE_BITS,
+        length_field_bits=LENGTH_FIELD_BITS,
     )
 
-    rng = random.Random(args.seed)
+    rng_pc1 = random.Random(args.seed)
+    pc1 = LegitimatePacketSource()
+    implant = CovertImplant()
 
-    print(f"[INFO] secret file: {args.filename}")
-    print(f"[INFO] secret bytes: {len(secret_data)}")
-    print(f"[INFO] total bits to send: {len(bitstream)}")
-    print(f"[INFO] length field bits: {LENGTH_FIELD_BITS}")
-    print(f"[INFO] payload bits: {len(secret_data) * 8}")
-    print(f"[INFO] base interval range: [{BASE_INTERVAL_MIN:.3f}, {BASE_INTERVAL_MAX:.3f}] s")
-    print(f"[INFO] delta: {DELTA:.3f} s")
-    print(f"[INFO] initial level: {INITIAL_LEVEL}")
+    packet_queue: queue.Queue[bytes] = queue.Queue()
+    stop_event = threading.Event()
+
+    print(f"[INFO] ПК1: в буфер пакеты — случайно каждые "
+          f"[{PC1_INTERVAL_MIN:.3f}, {PC1_INTERVAL_MAX:.3f}] с (быстрее выдачи t и t+Δ)")
+    print(f"[INFO] закладка: паузы только t={IMPLANT_INTERVAL_T:.3f} с или t+Δ={IMPLANT_INTERVAL_T + DELTA:.3f} с (без разброса)")
+    print(f"[INFO] файл: {args.filename}, байт: {len(secret_data)}")
+    print(f"[INFO] преамбула: {len(PREAMBLE_BITS)} бит, поле длины: {LENGTH_FIELD_BITS}, бит к передаче: {len(bitstream)}")
 
     addr = (args.host, args.port)
-    current_level = INITIAL_LEVEL
+
+    producer = threading.Thread(
+        target=pc1_producer_loop,
+        args=(pc1, packet_queue, rng_pc1, stop_event, 0),
+        daemon=True,
+    )
 
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        # Стартовый синхропакет.
-        # После него приемник начинает измерять интервалы.
-        sync_packet = build_legitimate_packet(0)
-        sock.sendto(sync_packet, addr)
-        print("[SYNC] initial packet sent")
+        producer.start()
+        deadline = time.monotonic() + 5.0
+        while packet_queue.qsize() < 1 and time.monotonic() < deadline:
+            time.sleep(0.001)
+        if packet_queue.qsize() < 1:
+            stop_event.set()
+            producer.join(timeout=1.0)
+            raise RuntimeError("ПК1 не успел положить SYNC (seq=0) в очередь")
 
-        seq = 1
+        # SYNC через очередь, без задержки закладки (интервал до первого бита задаётся приёмником)
+        implant.wait_and_send_from_queue(sock, addr, packet_queue, 0.0)
+        print("[SYNC] пакет seq=0 отправлен из очереди закладкой")
 
         for idx, bit in enumerate(bitstream, start=1):
-            base_interval = rng.uniform(BASE_INTERVAL_MIN, BASE_INTERVAL_MAX)
-
-            if bit == "1":
-                current_level = 1 - current_level
-
-            actual_interval = base_interval + (DELTA if current_level == 1 else 0.0)
-
-            packet = build_legitimate_packet(seq)
-            send_with_buffering(sock, addr, packet, actual_interval)
+            base_interval, actual_interval = implant.intervals_for_bit(bit)
+            implant.wait_and_send_from_queue(sock, addr, packet_queue, actual_interval)
 
             print(
                 f"[SEND] bit#{idx:05d}={bit} "
                 f"base={base_interval:.6f}s "
-                f"level={current_level} "
+                f"level={implant.current_level} "
                 f"actual={actual_interval:.6f}s "
-                f"seq={seq}"
+                f"queue≈{packet_queue.qsize()}"
             )
 
-            seq += 1
+        stop_event.set()
+        producer.join(timeout=2.0)
 
-    print("[INFO] transmission finished")
+    print("[INFO] передача завершена")
 
 
 if __name__ == "__main__":

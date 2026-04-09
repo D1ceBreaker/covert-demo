@@ -11,16 +11,22 @@ DEFAULT_P1_PORT = 3000
 
 PACKET_SIZE = 256
 
-BASE_INTERVAL_MIN = 0.180
-BASE_INTERVAL_MAX = 0.220
+# ПК1: единственный разброс — случайный интервал между помещением пакетов в буфер
+# (верхняя граница не выше t закладки, чтобы накопление в очереди опережало выдачу)
+PC1_INTERVAL_MIN = 0.1
+PC1_INTERVAL_MAX = 0.2
 
-DELTA = 0.100
+# Закладка: фиксированные задержки между отправками по примеру 10 — t или t + Δ, без разброса
+IMPLANT_INTERVAL_T = 0.2
+DELTA = 0.1
 
 INITIAL_LEVEL = 0
 
-LEVEL_THRESHOLD = (
-    BASE_INTERVAL_MAX + (BASE_INTERVAL_MIN + DELTA)
-) / 2.0
+# Порог между «коротким» (t) и «длинным» (t + Δ) интервалом на приёмнике
+LEVEL_THRESHOLD = (IMPLANT_INTERVAL_T + IMPLANT_INTERVAL_T + DELTA) / 2.0
+
+# Преамбула в битовом потоке (после служебного SYNC-пакета seq=0)
+PREAMBLE_BITS = "10101010"
 
 LENGTH_FIELD_BITS = 32
 
@@ -38,6 +44,6 @@ LIMIT_DUMMY_PROBABILITY = 0.15
 LIMIT_DUMMY_DELAY_MIN = 0.05
 LIMIT_DUMMY_DELAY_MAX = 0.15
 
-NORMALIZE_INTERVAL = 0.18
+NORMALIZE_INTERVAL = IMPLANT_INTERVAL_T
 
 DUMMY_PACKET_SIZE = PACKET_SIZE

@@ -7,6 +7,7 @@ from constants import (
     DEFAULT_P2_LISTEN_PORT,
     INITIAL_LEVEL,
     LEVEL_THRESHOLD,
+    PREAMBLE_BITS,
     LENGTH_FIELD_BITS,
     SOCKET_TIMEOUT_SECONDS,
     RECV_BUFFER_SIZE,
@@ -103,12 +104,25 @@ def main():
 
         print(f"[SYNC] initial packet received from {addr}, size={len(data)}")
 
+        preamble_bits, prev_timestamp, prev_level = decode_n_bits(
+            sock=sock,
+            prev_timestamp=prev_timestamp,
+            prev_level=prev_level,
+            count=len(PREAMBLE_BITS),
+            stage="PREAMBLE",
+        )
+
+        print(f"[INFO] ожидаемая преамбула: {PREAMBLE_BITS}")
+        print(f"[INFO] принятая преамбула: {preamble_bits}")
+        if preamble_bits != PREAMBLE_BITS:
+            raise RuntimeError("Преамбула не совпала, декодирование прервано.")
+
         length_bits, prev_timestamp, prev_level = decode_n_bits(
             sock=sock,
             prev_timestamp=prev_timestamp,
             prev_level=prev_level,
             count=LENGTH_FIELD_BITS,
-            stage="LENGTH"
+            stage="LENGTH",
         )
 
         payload_length_bytes = bits_to_int(length_bits)
